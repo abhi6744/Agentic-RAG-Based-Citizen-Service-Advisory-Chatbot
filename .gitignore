@@ -40,7 +40,10 @@ uploads/
 user_uploads/
 
 # Generated RAG/vector artifacts
-**/vector_store/
+akshaya-backend/data/vector_store/*
+!akshaya-backend/data/vector_store/README.md
+akshaya-backend/data/processed/*
+!akshaya-backend/data/processed/README.md
 **/faiss_index.index
 **/faiss_metadata.json
 **/chunks.jsonl
@@ -64,3 +67,9 @@ Desktop.ini
 *.bak
 *.old
 *.orig
+
+# Local AI-agent and editor configuration
+akshaya-frontend/.claude/
+akshaya-frontend/AGENTS.md
+akshaya-frontend/CLAUDE.md
+akshaya-frontend/.vscode/
