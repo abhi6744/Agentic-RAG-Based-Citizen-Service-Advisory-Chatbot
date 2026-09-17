@@ -103,10 +103,14 @@ The backend requires a `.env` file containing API keys and other configuration p
 3. Setup the frontend dependencies.
 
 ## Running the backend
-Navigate to `akshaya-backend/` and run:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
+``cmd
+cd akshaya-backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+uvicorn app.main:app --reload --port 8000
+``
 
 ## Running the frontend
 Navigate to `akshaya-frontend/` and run:
