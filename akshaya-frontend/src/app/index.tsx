@@ -1,0 +1,1463 @@
+import { Ionicons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import * as Speech from 'expo-speech';
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
+
+import AppDrawerContent from "../components/AppDrawerContent";
+import QueryComposer from "../components/QueryComposer";
+import { useTheme } from "../contexts/ThemeContext";
+
+const LOGO = require("../../assets/images/akshaya-logo.png");
+
+const stripForSpeech = (text: string) => {
+  if (!text) return "";
+  return text.replace(/[#*%_]/g, "").trim();
+};
+
+const cleanString = (text: string) => {
+  if (!text) return "";
+  return text.replace(/[#%]/g, "").trim();
+};
+
+function FormattedText({ text, style }: { text: string; style?: any }) {
+  if (!text) return null;
+  // Remove # and % as requested, but keep ** for parsing
+  const cleaned = text.replace(/[#%]/g, "");
+  const parts = cleaned.split(/\*\*(.*?)\*\*/g);
+
+  return (
+    <Text style={style}>
+      {parts.map((part, index) => {
+        const isBold = index % 2 === 1;
+        return (
+          <Text key={index} style={isBold ? { fontWeight: "bold" } : {}}>
+            {part}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+}
+
+type SourceCitation = {
+  source_title: string;
+  source_url?: string;
+  authority: string;
+  retrieved_date?: string;
+};
+
+type BackendData = {
+  message_id: number;
+  conversation_id: number;
+  detected_service?: string;
+  summary: string;
+  documents_and_eligibility?: string;
+  next_steps?: string;
+  citations: SourceCitation[];
+  confidence_score: number;
+  confidence_level: string;
+  requires_official_verification: boolean;
+  verification_message?: string;
+  image_description?: string;
+  privacy_warning?: string;
+};
+
+type Message = {
+  id: string;
+  role: "assistant" | "user";
+  text: string;
+  imageUri?: string;
+  backendData?: BackendData;
+};
+
+const suggestions = [
+  { text: "What documents do I need for a new ration card in Kerala?", icon: "list-outline" as const },
+  { text: "Am I eligible for a National Scholarship, and what documents are needed?", icon: "school-outline" as const },
+  { text: "My name in Aadhaar doesn't match my certificate — how do I update it?", icon: "id-card-outline" as const },
+];
+
+const welcomeMessage: Message = {
+  id: "welcome",
+  role: "assistant",
+  text: "Describe your issue in your own words — Aadhaar, ration card, or scholarship. You can also attach a photo of a document.",
+};
+
+export default function HomeChatScreen() {
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+
+  const params = useLocalSearchParams<{
+    query?: string | string[];
+    conversation_id?: string | string[];
+  }>();
+
+  const initialQuery = useMemo(() => {
+    if (Array.isArray(params.query)) {
+      return params.query[0] ?? "";
+    }
+    return params.query ?? "";
+  }, [params.query]);
+
+  const paramConvId = useMemo(() => {
+    if (Array.isArray(params.conversation_id)) {
+      return params.conversation_id[0] ?? null;
+    }
+    return params.conversation_id ?? null;
+  }, [params.conversation_id]);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const processedQueryRef = useRef<string | null>(null);
+
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [conversationId, setConversationId] = useState<number | null>(null);
+
+  const isDesktop = width >= 800;
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || (Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://127.0.0.1:8000');
+
+  useEffect(() => {
+    async function loadConversation() {
+      if (!paramConvId) return;
+      
+      const idStr = paramConvId.toString();
+      // Only fetch if it changed
+      if (conversationId?.toString() === idStr && messages.length > 1) return;
+
+      try {
+        setIsProcessing(true);
+        const res = await fetch(`${API_URL}/conversations/${idStr}`);
+        if (!res.ok) throw new Error("Failed to load conversation");
+        const data = await res.json();
+        
+        setConversationId(data.conversation_id);
+        
+        const loadedMessages: Message[] = [welcomeMessage];
+        for (const msg of data.messages) {
+          if (msg.role === "user") {
+            loadedMessages.push({
+              id: `user-${msg.id}`,
+              role: "user",
+              text: msg.text_content,
+              imageUri: msg.image_path ? "has-image" : undefined, // Just a visual placeholder if image is attached
+            });
+          } else {
+            loadedMessages.push({
+              id: `assistant-${msg.id}`,
+              role: "assistant",
+              text: msg.text_content,
+              backendData: {
+                message_id: msg.id,
+                conversation_id: data.conversation_id,
+                detected_service: msg.detected_service,
+                summary: msg.text_content, // the actual message since we don't have all parsed parts
+                citations: msg.sources || [],
+                confidence_score: msg.confidence_score,
+                confidence_level: msg.confidence_score > 0.7 ? "high" : "low",
+                requires_official_verification: msg.requires_verification,
+              }
+            });
+          }
+        }
+        setMessages(loadedMessages);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+    
+    loadConversation();
+  }, [paramConvId]);
+
+  useEffect(() => {
+    if (
+      initialQuery.length > 0 &&
+      processedQueryRef.current !== initialQuery
+    ) {
+      processedQueryRef.current = initialQuery;
+      submitQuestion(initialQuery);
+    }
+  }, [initialQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [messages, isProcessing]);
+
+  function startNewChat() {
+    setMessages([welcomeMessage]);
+    setConversationId(null);
+    processedQueryRef.current = null;
+    router.replace("/");
+  }
+
+  async function submitQuestion(question: string, imageUri?: string) {
+    const cleanedQuestion = question.trim();
+
+    if ((!cleanedQuestion && !imageUri) || isProcessing) {
+      return;
+    }
+
+    setMessages((currentMessages) => [
+      ...currentMessages,
+      {
+        id: `user-${Date.now()}`,
+        role: "user",
+        text: cleanedQuestion,
+        imageUri,
+      },
+    ]);
+
+    setIsProcessing(true);
+
+    try {
+      const formData = new FormData();
+      if (cleanedQuestion) {
+        formData.append("text", cleanedQuestion);
+      }
+
+      if (imageUri) {
+        if (Platform.OS === 'web') {
+          const res = await fetch(imageUri);
+          const blob = await res.blob();
+          formData.append("image", blob, "upload.jpg");
+        } else {
+          formData.append("image", {
+            uri: imageUri,
+            name: "upload.jpg",
+            type: "image/jpeg",
+          } as any);
+        }
+      }
+
+      if (conversationId) {
+        formData.append("conversation_id", conversationId.toString());
+      }
+      formData.append("device_id", "expo-client");
+
+      const response = await fetch(`${API_URL}/chat`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data: BackendData = await response.json();
+      
+      setConversationId(data.conversation_id);
+
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: data.message_id.toString(),
+          role: "assistant",
+          text: data.summary || "No summary provided.",
+          backendData: data,
+        },
+      ]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          text: "Sorry, I couldn't reach the backend server. Please try again.",
+        },
+      ]);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  const hasUserMessage = messages.some(
+    (message) => message.role === "user",
+  );
+
+  return (
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.surface,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.headerInner,
+              isDesktop && styles.desktopHeaderInner,
+            ]}
+          >
+            <Pressable
+              onPress={() => setDrawerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open application menu"
+              style={[
+                styles.headerButton,
+                {
+                  backgroundColor: colors.primarySoft,
+                },
+              ]}
+            >
+              <Ionicons
+                name="menu-outline"
+                size={25}
+                color={colors.primaryDark}
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={startNewChat}
+              accessibilityRole="button"
+              accessibilityLabel="Start a new chat"
+              style={styles.brandButton}
+            >
+              <View style={[styles.brandLogoContainer, { borderWidth: 0 }]}>
+                <Image
+                  source={LOGO}
+                  resizeMode="contain"
+                  style={styles.brandLogoImage}
+                  accessibilityLabel="Akshaya Advisory logo"
+                />
+              </View>
+
+              <View style={styles.brandTextArea}>
+                <Text
+                  style={[
+                    styles.brandTitle,
+                    {
+                      color: colors.text,
+                    },
+                  ]}
+                >
+                  Akshaya Advisory
+                </Text>
+
+                <Text
+                  style={[
+                    styles.brandSubtitle,
+                    {
+                      color: colors.textMuted,
+                    },
+                  ]}
+                >
+                  Citizen-service assistant
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push("/account")}
+              accessibilityRole="button"
+              accessibilityLabel="Open account and privacy"
+              style={[
+                styles.headerButton,
+                {
+                  backgroundColor: colors.primarySoft,
+                },
+              ]}
+            >
+              <Ionicons
+                name="person-circle-outline"
+                size={26}
+                color={colors.primaryDark}
+              />
+            </Pressable>
+          </View>
+        </View>
+
+        <ScrollView
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.content,
+            isDesktop && styles.desktopContent,
+          ]}
+        >
+          {messages.length === 1 && (
+            <View style={styles.welcomeArea}>
+              <View style={[styles.heroLogoWrapper, { backgroundColor: colors.primarySoft, borderRadius: 40 }]}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={32}
+                  color={colors.primaryDark}
+                />
+              </View>
+
+              <Text style={[styles.welcomeTitle, { color: colors.text }]}>
+                How can we help today?
+              </Text>
+
+              <Text style={[styles.welcomeSubtitle, { color: colors.textMuted }]}>
+                {welcomeMessage.text}
+              </Text>
+
+              <View style={[styles.assuranceCard, { backgroundColor: colors.primarySoft }]}>
+                <Ionicons name="shield-checkmark-outline" size={18} color={colors.primaryDark} />
+                <Text style={[styles.assuranceText, { color: colors.primaryDark }]}>
+                  Clear advisory guidance before you visit an Akshaya centre.
+                </Text>
+              </View>
+
+              <Text style={[styles.suggestionHeading, { color: colors.textMuted, fontFamily: 'Manrope_600SemiBold', fontSize: 13 }]}>
+                Try asking
+              </Text>
+
+              <View style={styles.suggestions}>
+                {suggestions.map((suggestion, index) => (
+                  <Pressable
+                    key={index}
+                    onPress={() => submitQuestion(suggestion.text)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ask: ${suggestion.text}`}
+                    style={({ pressed }) => [
+                      styles.suggestionCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        opacity: pressed ? 0.76 : 1,
+                      },
+                    ]}
+                  >
+                    <View style={[styles.suggestionIcon, { backgroundColor: colors.primarySoft }]}>
+                      <Ionicons name={suggestion.icon} size={18} color={colors.primaryDark} />
+                    </View>
+                    <Text style={[styles.suggestionText, { color: colors.text }]}>
+                      {suggestion.text}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {messages.map((message) => (
+            <MessageBubble key={message.id} message={message} />
+          ))}
+
+          {isProcessing && <TypingIndicator />}
+
+          {hasUserMessage && !isProcessing && (
+            (() => {
+              const latestAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+              const data = latestAssistant?.backendData;
+              if (!data) return null;
+              return <AdvisoryDetails key={data.message_id} data={data} />;
+            })()
+          )}
+        </ScrollView>
+
+        <View style={styles.composerArea}>
+          <View style={[styles.composerWrapper, isDesktop && styles.desktopComposerWrapper]}>
+            <QueryComposer onSubmit={submitQuestion} disabled={isProcessing} placeholder="Describe your issue or question..." />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      <Modal visible={drawerVisible} transparent animationType="slide" onRequestClose={() => setDrawerVisible(false)}>
+        <View style={[styles.drawerOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.drawerPanel, { backgroundColor: colors.surface }]}>
+            <Pressable onPress={() => setDrawerVisible(false)} style={[styles.closeButton, { backgroundColor: colors.primarySoft }]}>
+              <Ionicons name="close" size={24} color={colors.primaryDark} />
+            </Pressable>
+            <AppDrawerContent onClose={() => setDrawerVisible(false)} />
+          </View>
+          <Pressable onPress={() => setDrawerVisible(false)} style={styles.drawerDismissArea} />
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+function MessageBubble({ message }: { message: Message }) {
+  const { colors } = useTheme();
+  const isUser = message.role === "user";
+
+  return (
+    <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
+      {!isUser && (
+        <View style={styles.assistantAvatarImageContainer}>
+          <Image source={LOGO} resizeMode="contain" style={styles.assistantAvatarImage} />
+        </View>
+      )}
+
+      <View
+        style={[
+          styles.messageBubble,
+          isUser ? styles.userBubble : styles.assistantBubble,
+          {
+            backgroundColor: isUser ? colors.primary : colors.surface,
+            borderColor: isUser ? colors.primary : colors.border,
+          },
+        ]}
+      >
+          {message.imageUri && message.imageUri === 'has-image' ? (
+            <View style={{ width: 200, height: 100, borderRadius: 8, marginBottom: 8, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+               <Ionicons name="image-outline" size={32} color="#fff" />
+               <Text style={{color: '#fff', fontSize: 10, marginTop: 4}}>Image uploaded</Text>
+            </View>
+          ) : message.imageUri ? (
+            <Image
+              source={{ uri: message.imageUri }}
+              style={{ width: 200, height: 200, borderRadius: 8, marginBottom: 8 }}
+              resizeMode="cover"
+            />
+          ) : null}
+          {isUser ? (
+            <Text style={[styles.messageText, { color: "#FFFFFF" }]}>
+              {message.text}
+            </Text>
+          ) : (
+          <FormattedText 
+            text={message.text} 
+            style={[styles.messageText, { color: colors.text }]} 
+          />
+        )}
+      </View>
+    </View>
+  );
+}
+
+function TypingIndicator() {
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.assistantRow}>
+      <View style={styles.assistantAvatarImageContainer}>
+        <Image source={LOGO} resizeMode="contain" style={styles.assistantAvatarImage} />
+      </View>
+
+      <View
+        style={[
+          styles.typingCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.typingText,
+            {
+              color: colors.text,
+            },
+          ]}
+        >
+          Preparing advisory guidance
+        </Text>
+
+        <View style={styles.dots}>
+          <View
+            style={[
+              styles.dot,
+              {
+                backgroundColor: colors.primary,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.dot,
+              {
+                backgroundColor: colors.primary,
+                opacity: 0.65,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.dot,
+              {
+                backgroundColor: colors.primary,
+                opacity: 0.35,
+              },
+            ]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+
+
+function AdvisoryDetails({ data }: { data: BackendData }) {
+  const { colors } = useTheme();
+  const [speechState, setSpeechState] = useState<'stopped' | 'playing' | 'paused'>('stopped');
+  const [feedbackState, setFeedbackState] = useState<'initial' | 'helpful-submitted' | 'needs-improvement' | 'not-helpful-submitted'>('initial');
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || (Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://127.0.0.1:8000');
+
+  const detailCards = [
+    {
+      icon: "search-outline" as const,
+      title: "Identified Service",
+      text: data.detected_service || "General Inquiry",
+    },
+    {
+      icon: "documents-outline" as const,
+      title: "Documents and eligibility",
+      text: data.documents_and_eligibility || "No specific documents listed.",
+    },
+    {
+      icon: "navigate-outline" as const,
+      title: "Recommended next steps",
+      text: data.next_steps || "No additional steps identified.",
+    },
+  ];
+
+  const textToRead = stripForSpeech(
+    (data.summary || "") + ". " +
+    (data.documents_and_eligibility || "") + ". " +
+    (data.next_steps || "")
+  );
+
+  const handlePlay = () => {
+    if (speechState === 'paused') {
+      Speech.resume();
+      setSpeechState('playing');
+    } else {
+      Speech.stop();
+      Speech.speak(textToRead, { 
+        language: 'en-IN', 
+        rate: 0.9,
+        onDone: () => setSpeechState('stopped'),
+        onStopped: () => setSpeechState('stopped')
+      });
+      setSpeechState('playing');
+    }
+  };
+  
+  const handlePause = () => {
+    if (speechState === 'playing') {
+      Speech.pause();
+      setSpeechState('paused');
+    }
+  };
+  
+  const handleStop = () => {
+    Speech.stop();
+    setSpeechState('stopped');
+  };
+
+  const submitFeedback = async (type: 'helpful' | 'not_helpful', comment?: string) => {
+    try {
+      await fetch(`${API_URL}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message_id: data.message_id, 
+          feedback_type: type,
+          comment: comment || undefined
+        })
+      });
+    } catch (e) {
+      console.error('Failed to submit feedback', e);
+    }
+  };
+
+  return (
+    <View style={styles.detailsArea}>
+      {data.requires_official_verification && (
+        <View
+          style={[
+            styles.verificationCard,
+            { backgroundColor: colors.warningBackground },
+          ]}
+        >
+          <Ionicons name="information-circle-outline" size={20} color={colors.warning} />
+          <View style={styles.verificationTextArea}>
+            <Text style={[styles.verificationTitle, { color: colors.warning }]}>
+              Official Verification Required
+            </Text>
+            <Text style={[styles.verificationText, { color: colors.warning }]}>
+              {cleanString(data.verification_message || "This information requires verification at your local Akshaya centre before proceeding.")}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {detailCards.map((detail) => (
+        <View
+          key={detail.title}
+          style={[
+            styles.detailCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <View style={[styles.detailIcon, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name={detail.icon} size={19} color={colors.primaryDark} />
+          </View>
+          <View style={styles.detailTextArea}>
+            <Text style={[styles.detailTitle, { color: colors.text }]}>{detail.title}</Text>
+            <FormattedText text={detail.text} style={[styles.detailText, { color: colors.textMuted }]} />
+          </View>
+        </View>
+      ))}
+
+      <View style={[styles.sourcesCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.sourcesHeader}>
+          <Ionicons name="link-outline" size={19} color={colors.primaryDark} />
+          <Text style={[styles.sourcesTitle, { color: colors.text }]}>
+            Sources & Confidence ({cleanString((data.confidence_score * 100).toString())} - {cleanString(data.confidence_level.toUpperCase())})
+          </Text>
+        </View>
+        <View style={{ marginTop: 8 }}>
+          {data.citations && data.citations.length > 0 ? (
+            data.citations.map((c, i) => (
+              <Pressable
+                key={i}
+                onPress={() => { if (c.source_url) Linking.openURL(c.source_url); }}
+                style={({ pressed }) => [{ marginBottom: 6, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Text style={[styles.sourcesText, { color: colors.primary, textDecorationLine: c.source_url ? "underline" : "none", marginTop: 0 }]}>
+                    {cleanString(c.source_title)} ({cleanString(c.authority)})
+                </Text>
+              </Pressable>
+            ))
+          ) : (
+            <Text style={[styles.sourcesText, { color: colors.textMuted }]}>
+              No specific sources linked.
+            </Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.audioRow}>
+        <AudioButton icon="play" label={speechState === 'paused' ? 'Resume' : 'Play audio'} onPress={handlePlay} colors={colors} />
+        <AudioButton icon="pause" label="Pause" onPress={handlePause} colors={colors} />
+        <AudioButton icon="stop" label="Stop" onPress={handleStop} colors={colors} />
+      </View>
+
+      <View style={[styles.feedbackCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {feedbackState === 'initial' && (
+          <>
+            <Text style={[styles.feedbackTitle, { color: colors.text }]}>Was this guidance useful?</Text>
+            <View style={styles.feedbackButtons}>
+              <FeedbackButton
+                icon="thumbs-up-outline"
+                label="Helpful"
+                selected={false}
+                onPress={() => {
+                  setFeedbackState('helpful-submitted');
+                  submitFeedback('helpful');
+                }}
+              />
+              <FeedbackButton
+                icon="thumbs-down-outline"
+                label="Needs improvement"
+                selected={false}
+                onPress={() => {
+                  setFeedbackState('needs-improvement');
+                }}
+              />
+            </View>
+          </>
+        )}
+
+        {feedbackState === 'helpful-submitted' && (
+          <Text style={[styles.feedbackTitle, { color: colors.primaryDark }]}>
+            Thank you for your feedback!
+          </Text>
+        )}
+
+        {feedbackState === 'needs-improvement' && (
+          <View style={{ gap: 10 }}>
+            <Text style={[styles.feedbackTitle, { color: colors.text }]}>
+              Thank you for your feedback. How can we improve this answer?
+            </Text>
+            <TextInput
+              style={[
+                styles.feedbackInput,
+                { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }
+              ]}
+              placeholder="Tell us what was missing or unclear (optional)"
+              placeholderTextColor={colors.textMuted}
+              value={feedbackComment}
+              onChangeText={setFeedbackComment}
+              multiline
+            />
+            <Pressable
+              style={({ pressed }) => [
+                styles.feedbackSubmitButton,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }
+              ]}
+              onPress={() => {
+                setFeedbackState('not-helpful-submitted');
+                submitFeedback('not_helpful', feedbackComment);
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 12, fontFamily: "Manrope_700Bold" }}>Submit feedback</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {feedbackState === 'not-helpful-submitted' && (
+          <Text style={[styles.feedbackTitle, { color: colors.primaryDark }]}>
+            Thank you for helping us improve!
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+
+
+function AudioButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: "play" | "pause" | "stop";
+  label: string;
+  onPress?: () => void;
+}) {
+  const { colors } = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.audioButton,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.borderStrong,
+          opacity: pressed ? 0.75 : 1,
+        },
+      ]}
+    >
+      <Ionicons
+        name={`${icon}-outline` as keyof typeof Ionicons.glyphMap}
+        size={16}
+        color={colors.primaryDark}
+      />
+
+      <Text
+        style={[
+          styles.audioButtonText,
+          {
+            color: colors.primaryDark,
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function FeedbackButton({
+  icon,
+  label,
+  selected,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [
+        styles.feedbackButton,
+        {
+          backgroundColor: selected
+            ? colors.primarySoft
+            : colors.surfaceMuted,
+          borderColor: selected
+            ? colors.borderStrong
+            : colors.border,
+          opacity: pressed ? 0.75 : 1,
+        },
+      ]}
+    >
+      <Ionicons
+        name={icon}
+        size={17}
+        color={colors.primaryDark}
+      />
+
+      <Text
+        style={[
+          styles.feedbackButtonText,
+          {
+            color: colors.text,
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+
+  keyboardView: {
+    flex: 1,
+  },
+
+  header: {
+    borderBottomWidth: 1,
+  },
+
+  headerInner: {
+    alignItems: "center",
+    alignSelf: "center",
+    flexDirection: "row",
+    minHeight: 70,
+    paddingHorizontal: 14,
+    width: "100%",
+  },
+
+  desktopHeaderInner: {
+    maxWidth: 760,
+  },
+
+  headerButton: {
+    alignItems: "center",
+    borderRadius: 12,
+    height: 43,
+    justifyContent: "center",
+    width: 43,
+  },
+
+  brandButton: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 9,
+    minWidth: 0,
+    paddingHorizontal: 10,
+  },
+
+  brandLogoContainer: {
+    alignItems: "center",
+    borderRadius: 11,
+    borderWidth: 1,
+    height: 43,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 43,
+  },
+
+  brandLogoImage: {
+    height: 38,
+    width: 38,
+  },
+
+  brandTextArea: {
+    flex: 1,
+  },
+
+  brandTitle: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 15,
+  },
+
+  brandSubtitle: {
+    fontFamily: "Manrope_400Regular",
+    fontSize: 10,
+    marginTop: 2,
+  },
+
+  content: {
+    alignSelf: "center",
+    maxWidth: 540,
+    padding: 17,
+    paddingBottom: 28,
+    width: "100%",
+  },
+
+  desktopContent: {
+    maxWidth: 700,
+  },
+
+  welcomeArea: {
+    alignItems: "center",
+    paddingTop: 25,
+  },
+
+  heroLogoContainer: {
+    alignItems: "center",
+    borderRadius: 55,
+    borderWidth: 1,
+    height: 110,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 110,
+  },
+
+  heroLogo: {
+    height: 96,
+    width: 96,
+  },
+
+  welcomeTitle: {
+    fontFamily: "Manrope_800ExtraBold",
+    fontSize: 28,
+    letterSpacing: -0.5,
+    marginTop: 19,
+    textAlign: "center",
+  },
+
+  welcomeSubtitle: {
+    fontFamily: "Manrope_400Regular",
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 9,
+    maxWidth: 480,
+    textAlign: "center",
+  },
+
+  assuranceCard: {
+    alignItems: "flex-start",
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 21,
+    maxWidth: 520,
+    padding: 13,
+  },
+
+  assuranceText: {
+    flex: 1,
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 11,
+    lineHeight: 18,
+  },
+
+  suggestionHeading: {
+    alignSelf: "flex-start",
+    fontFamily: "Manrope_700Bold",
+    fontSize: 15,
+    marginBottom: 11,
+    marginTop: 28,
+  },
+
+  suggestions: {
+    alignSelf: "stretch",
+    gap: 10,
+  },
+
+  suggestionCard: {
+    alignItems: "center",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 66,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  suggestionIcon: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 37,
+    justifyContent: "center",
+    width: 37,
+  },
+
+  suggestionText: {
+    flex: 1,
+    fontFamily: "Manrope_500Medium",
+    fontSize: 12,
+    lineHeight: 19,
+  },
+
+  messageRow: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+  },
+
+  userRow: {
+    justifyContent: "flex-end",
+  },
+
+  assistantRow: {
+    justifyContent: "flex-start",
+  },
+
+  assistantAvatar: {
+    alignItems: "center",
+    borderRadius: 16,
+    height: 31,
+    justifyContent: "center",
+    width: 31,
+  },
+
+  messageBubble: {
+    borderRadius: 18,
+    borderWidth: 1,
+    maxWidth: "84%",
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+  },
+
+  userBubble: {
+    borderBottomRightRadius: 4,
+  },
+
+  assistantBubble: {
+    borderBottomLeftRadius: 4,
+  },
+
+  messageText: {
+    fontFamily: "Manrope_400Regular",
+    fontSize: 13,
+    lineHeight: 21,
+  },
+
+  typingCard: {
+    borderBottomLeftRadius: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    minWidth: 220,
+    padding: 13,
+  },
+
+  typingText: {
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 12,
+  },
+
+  dots: {
+    flexDirection: "row",
+    gap: 5,
+    marginTop: 9,
+  },
+
+  dot: {
+    borderRadius: 4,
+    height: 7,
+    width: 7,
+  },
+
+  detailsArea: {
+    marginTop: 9,
+  },
+
+  verificationCard: {
+    alignItems: "flex-start",
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+    padding: 14,
+  },
+
+  verificationTextArea: {
+    flex: 1,
+  },
+
+  verificationTitle: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 12,
+  },
+
+  verificationText: {
+    fontFamily: "Manrope_400Regular",
+    fontSize: 11,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+
+  detailCard: {
+    alignItems: "flex-start",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+    padding: 14,
+  },
+
+  detailIcon: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 39,
+    justifyContent: "center",
+    width: 39,
+  },
+
+  audioRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+
+  detailTextArea: {
+    flex: 1,
+  },
+
+  detailTitle: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 12,
+  },
+
+  detailText: {
+    fontFamily: "Manrope_400Regular",
+    fontSize: 11,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+
+  sourcesCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 2,
+    padding: 14,
+  },
+
+  sourcesHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+  },
+
+  sourcesTitle: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 12,
+  },
+
+  sourcesText: {
+    fontFamily: "Manrope_400Regular",
+    fontSize: 11,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+
+  audioCard: {
+    borderRadius: 16,
+    marginTop: 11,
+    padding: 14,
+  },
+
+  audioTopRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  audioIcon: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 39,
+    justifyContent: "center",
+    width: 39,
+  },
+
+  audioTextArea: {
+    flex: 1,
+  },
+
+  audioTitle: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 12,
+  },
+
+  audioText: {
+    fontFamily: "Manrope_400Regular",
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 3,
+  },
+
+  audioButtons: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  audioButton: {
+    alignItems: "center",
+    borderRadius: 9,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+
+  audioButtonText: {
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 10,
+  },
+
+  feedbackCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 11,
+    padding: 14,
+  },
+
+  feedbackTitle: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 12,
+  },
+
+  feedbackButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 11,
+  },
+
+  feedbackButton: {
+    alignItems: "center",
+    borderRadius: 9,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+
+  feedbackButtonText: {
+    fontFamily: "Manrope_600SemiBold",
+    fontSize: 10,
+  },
+
+  feedbackInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 12,
+    fontFamily: "Manrope_500Medium",
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
+
+  feedbackSubmitButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    paddingVertical: 10,
+    marginTop: 5,
+  },
+
+  composerArea: {
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingBottom: 24, // Added bottom padding to ensure it floats nicely
+  },
+
+  composerWrapper: {
+    width: "100%",
+  },
+
+  desktopComposerWrapper: {
+    maxWidth: 700,
+  },
+
+  drawerOverlay: {
+    flex: 1,
+    flexDirection: "row",
+  },
+
+  drawerPanel: {
+    maxWidth: 340,
+    paddingTop: 48,
+    width: "86%",
+  },
+
+  closeButton: {
+    alignItems: "center",
+    borderRadius: 11,
+    height: 40,
+    justifyContent: "center",
+    position: "absolute",
+    right: 11,
+    top: 5,
+    width: 40,
+    zIndex: 3,
+  },
+
+  drawerDismissArea: {
+    flex: 1,
+  },
+
+  heroLogoWrapper: {
+    alignItems: "center",
+    borderRadius: 28,
+    height: 80,
+    justifyContent: "center",
+    marginBottom: 16,
+    width: 80,
+    overflow: "hidden",
+  },
+
+  heroLogoIcon: {
+    height: "100%",
+    width: "100%",
+  },
+
+  assistantAvatarImageContainer: {
+    alignItems: "center",
+    borderRadius: 12,
+    height: 31,
+    justifyContent: "center",
+    width: 31,
+    overflow: "hidden",
+  },
+
+  assistantAvatarImage: {
+    height: "100%",
+    width: "100%",
+  },
+});

@@ -1,0 +1,66 @@
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+credentials.json
+service-account*.json
+secrets/
+
+# Python environments and caches
+**/venv/
+**/.venv/
+**/env/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# JavaScript and Expo
+**/node_modules/
+**/.expo/
+**/.expo-shared/
+**/dist/
+**/build/
+**/coverage/
+**/.next/
+**/.cache/
+
+# Runtime databases and logs
+*.sqlite
+*.sqlite3
+*.db
+*.log
+*.tmp
+uploads/
+user_uploads/
+
+# Generated RAG/vector artifacts
+**/vector_store/
+**/faiss_index.index
+**/faiss_metadata.json
+**/chunks.jsonl
+**/ingestion_report.json
+
+# Local reference/document folder
+akshaya-knowledge-base/
+
+# Local IDE files
+.idea/
+.vscode/*.local
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.bak
+*.old
+*.orig
