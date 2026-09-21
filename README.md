@@ -1,144 +1,94 @@
-# Akshaya Advisory
+# Akshaya Advisory MVP
 
-## Project overview
-Akshaya Advisory is a Citizen Service Advisory Chatbot designed to assist citizens with navigating government services in Kerala, specifically for Aadhaar, Kerala Ration Cards, and Scholarships. This MVP is an English-only application.
+Akshaya Advisory is a Citizen Service Advisory Chatbot designed to assist citizens with navigating government services in Kerala. This MVP utilizes an Agentic Retrieval-Augmented Generation (RAG) architecture to provide accurate, strictly sourced, and context-aware guidance for citizens.
 
-## Problem statement
-Citizens often find it difficult to navigate complex bureaucratic requirements, identifying the correct documents, fees, and office locations for government services.
+## Supported Services
+This MVP is strictly scoped to the following services in **English**:
+1. **Aadhaar Services:** Enrollment, updates, document requirements, and general guidance.
+2. **Kerala Ration Card Services:** Applying for new cards, adding/removing members, and eligibility criteria.
+3. **Scholarship Services:** Advisory on National Scholarship Portal (NSP) schemes, eligibility, and required documentation.
 
-## Proposed solution
-An intelligent, context-aware chatbot (Agentic RAG) that provides accurate, sourced answers based on official government documents and rules.
+## Core Features
+* **Multimodal Chat (Text & Images):** Users can ask text questions or upload/capture images of documents. The backend uses a vision-capable LLM to analyze the document, classify the service, and provide relevant official guidance.
+* **Agentic RAG Pipeline:** Combines intent classification, dynamic FAISS semantic search, and structured LLM generation to produce highly accurate, formatted responses (Summary, Documents, Eligibility, Next Steps).
+* **Contextual Follow-ups:** Maintains conversation context, allowing users to ask follow-up questions like "Where should I go?" without restating the service name.
+* **Strict Source Grounding:** Answers are generated *strictly* using the retrieved official documents. The system provides active citations and degrades gracefully if a question is out of scope (Anti-Hallucination).
+* **Feedback & History:** Users can upvote/downvote answers with comments and view their past categorized conversations.
 
-## Current MVP scope
-The current MVP is limited to English-language interactions and focuses exclusively on three predefined service categories. It does not process actual applications but provides advisory guidance.
+## Architecture & Technology Stack
 
-## Supported services
+### Frontend (React Native / Expo)
+* **Framework:** Expo (React Native Web + Mobile), TypeScript.
+* **Features:** Responsive Blue/White UI, cross-platform file uploads (Blob/File on Web, URI on Native), robust message rendering, offline-safe history state.
+* **Networking:** Auto-detects environment to map API requests (`127.0.0.1` for Web, `10.0.2.2` for Android Emulators, or custom network IPs).
 
-### Aadhaar Services
-Guidance on enrollment, updates, document requirements, and finding enrollment centers.
+### Backend (Python / FastAPI)
+* **Framework:** FastAPI, Uvicorn ASGI server, SQLAlchemy ORM.
+* **AI / LLM:** **Grok API (`grok-2-latest`)** for both text and vision evaluation.
+* **Embeddings & Vector Store:** `sentence-transformers/all-MiniLM-L6-v2` embeddings indexed in **FAISS** for ultra-fast local retrieval.
+* **Database:** SQLite for structured data (Conversations, Messages, Feedback, Citations).
 
-### Kerala Ration Card Services
-Information on applying for new cards, adding/removing members, and eligibility criteria based on the Kerala Ration Card rules.
+## Security & Privacy Safeguards
+* **Temporary Image Processing:** Uploaded document images are saved to a temporary directory, evaluated by the vision model, and **immediately deleted** in a `try/finally` block. They are never permanently stored or embedded into the vector database.
+* **PII Scrubbing:** Built-in privacy filters prevent sensitive numerical data from being unnecessarily processed or echoed.
+* **Secrets Management:** Environment variables (`.env`) are strictly untracked.
 
-### Scholarship Services
-Advisory on National Scholarship Portal (NSP) schemes, eligibility, and required documentation.
+---
 
-## Main features
+## Local Setup & Installation
 
-### Natural-language chat
-Conversational interface to ask questions about supported services.
-
-### Contextual follow-up questions
-The system remembers the context (e.g., if you ask about Ration Cards, a follow-up like "Where should I go?" will remain in the Ration Card context).
-
-### Next-step guidance
-Provides actionable next steps after resolving the immediate query.
-
-### Image upload
-Users can attach images (mocked UI support for document analysis in the future).
-
-### Source citations
-Answers include references to the official documents they were derived from.
-
-### Confidence and verification warnings
-The system issues warnings if a query is out of scope or if the information must be independently verified.
-
-### Feedback collection
-Users can rate answers as helpful or unhelpful and provide comments.
-
-### Conversation history
-Maintains a log of past user interactions.
-
-### Privacy safeguards
-Filters out personal or sensitive information before processing queries.
-
-## Frontend architecture
-- React Native / Expo application
-- Written in TypeScript
-- Uses Expo Router for navigation
-- Custom theming (light blue/white layout)
-
-## Backend architecture
-- FastAPI application (Python)
-- Uvicorn ASGI server
-- Agentic architecture for routing and RAG
-
-## Agentic RAG pipeline
-Retrieval-Augmented Generation using a combination of intent classification, semantic search, and an LLM for natural language response generation.
-
-## Document ingestion pipeline
-Scripts to parse PDFs from the local knowledge base, chunk text, and embed it using an embedding model.
-
-## Embedding and vector search
-Leverages embedding models to convert text chunks into vector representations for semantic search.
-
-## FAISS vector store
-Local vector database using FAISS to index and rapidly retrieve relevant document chunks.
-
-## SQLite database
-Stores structured data such as chat history, feedback, and user sessions.
-
-## API endpoints
-- `/api/v1/chat`: Main conversational endpoint.
-- `/api/v1/feedback`: Endpoint to submit user feedback.
-- `/api/v1/history`: Endpoint to fetch conversation history.
-
-## Project folder structure
-- `akshaya-frontend/`: Contains the Expo React Native application.
-- `akshaya-backend/`: Contains the FastAPI backend, ingestion scripts, and database models.
-- `docs/`: General project documentation.
-
-## Technology stack
-- **Frontend:** React Native, Expo, TypeScript
-- **Backend:** Python, FastAPI, Uvicorn, SQLAlchemy
-- **AI/Vector Store:** FAISS, Grok API (LLM)
-- **Database:** SQLite
-
-## Environment variables
-The backend requires a `.env` file containing API keys and other configuration parameters. See `.env.example` for required keys.
-
-## Local setup
-1. Clone the repository.
-2. Setup the backend virtual environment and install requirements.
-3. Setup the frontend dependencies.
-
-## Running the backend
-``cmd
+### 1. Backend Setup
+Navigate to the backend directory and set up the Python environment:
+```cmd
 cd akshaya-backend
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env
-uvicorn app.main:app --reload --port 8001
-``
-
-## Running the frontend
-Navigate to `akshaya-frontend/` and run:
-```bash
-npx expo start --web
 ```
 
-## Building the knowledge base
-Navigate to `akshaya-backend/ingestion/` and run the appropriate scripts to parse documents and build the FAISS index. (Note: Raw documents are stored locally in `akshaya-knowledge-base` and are deliberately ignored in Git).
+**Environment Variables:**
+Create a `.env` file in `akshaya-backend/` based on `.env.example`:
+```env
+GROK_API_KEY=your_api_key_here
+```
 
-## Testing
-Test the API endpoints directly or use the Expo web interface.
+**Start the Backend Server:**
+```cmd
+uvicorn app.main:app --port 8001
+# Note: Use --reload for development
+```
+The API will be available at `http://127.0.0.1:8001`.
 
-## Grounding and anti-hallucination design
-The LLM is strictly prompted to use only the provided context. If an answer cannot be found in the context, it gracefully degrades rather than hallucinating details.
+### 2. Frontend Setup
+Navigate to the frontend directory:
+```cmd
+cd akshaya-frontend
+npm install
+```
 
-## Security and privacy
-No PII is permanently logged in plain text where avoidable, and privacy filters scrub sensitive data from user queries before LLM processing.
+**Start the Frontend Web App:**
+```cmd
+npx expo start --web
+```
+You can also run it on an Android Emulator by pressing `a` in the Expo terminal. The app will automatically route requests to `10.0.2.2:8001` to bridge the emulator network gap.
 
-## Current limitations
-- English only.
-- Limited to three service domains.
-- Does not integrate with live government portals.
+### 3. Knowledge Base Ingestion (Optional)
+The pre-built FAISS index is already included in `akshaya-backend/data/vector_store/`. 
+If you add new official PDFs to the `akshaya-knowledge-base` directory, re-run the ingestion pipeline:
+```cmd
+cd akshaya-backend/ingestion
+python extract_text.py
+python chunk_documents.py
+python generate_embeddings.py
+python build_faiss_index.py
+```
 
-## Future enhancements
-- Multi-lingual support (Malayalam, Hindi).
-- More government services.
-- Real-time location integration for nearby Akshaya centers.
+## API Reference
+* `POST /chat`: Main endpoint for sending text/image queries. Returns a structured JSON response.
+* `POST /feedback`: Accepts user ratings (`helpful`/`not_helpful`) and comments.
+* `GET /conversations`: Returns a paginated list of the user's conversation history based on `device_id`.
+* `GET /conversations/{id}`: Returns full message history and context for a specific conversation.
+* `GET /health`: System availability check.
 
-## Important source and verification disclaimer
-This chatbot does not replace an Akshaya operator or government department. Current requirements, fees, and procedures must be confirmed through official sources.
+## Disclaimer
+This MVP chatbot is an advisory tool and does not replace an Akshaya operator or official government department. Requirements and fees should be independently verified.
