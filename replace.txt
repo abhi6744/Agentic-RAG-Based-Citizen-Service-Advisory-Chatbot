@@ -1,0 +1,2 @@
+regex:GCP_API_KEY\s*=\s*["'][^"']*["']==>GCP_API_KEY = ""
+regex:OPENAI_API_KEY\s*=\s*["'][^"']*["']==>OPENAI_API_KEY = ""

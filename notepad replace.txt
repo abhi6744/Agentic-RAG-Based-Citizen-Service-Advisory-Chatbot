@@ -1,0 +1,2 @@
+regex:sk-proj-[A-Za-z0-9_-]+==>[REDACTED_OPENAI_KEY]
+regex:AIza[0-9A-Za-z_-]+==>[REDACTED_GCP_KEY]

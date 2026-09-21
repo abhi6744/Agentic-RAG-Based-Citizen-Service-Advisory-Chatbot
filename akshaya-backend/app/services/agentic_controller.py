@@ -15,6 +15,7 @@ Flow:
 """
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 
@@ -36,6 +37,7 @@ from app.services.privacy_filter import check_privacy
 from app.services.retriever import RetrievedChunk, get_retriever
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 OUT_OF_SCOPE_RESPONSE = (
     "This question is outside the scope of Akshaya Advisory. "
@@ -222,6 +224,7 @@ def _rewrite_query(query: str, service: str) -> str:
 import re
 
 import json
+import logging
 
 def _parse_response_sections(
     response: str,
