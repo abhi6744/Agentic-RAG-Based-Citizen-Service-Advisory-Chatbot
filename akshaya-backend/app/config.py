@@ -1,0 +1,24 @@
+import os
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    """Application settings loaded from .env file."""
+
+    grok_api_key: str = ""
+    database_url: str = "sqlite:///./data/akshaya.db"
+    faiss_index_path: str = "./data/vector_store/faiss_index.index"
+    faiss_metadata_path: str = "./data/vector_store/faiss_metadata.json"
+    embedding_model: str = "all-MiniLM-L6-v2"
+    low_confidence_threshold: float = 0.35
+    moderate_confidence_threshold: float = 0.55
+    high_confidence_threshold: float = 0.70
+    top_k_results: int = 5
+    upload_dir: str = "./data/uploads"
+    knowledge_base_path: str = (
+        r"C:\Users\abhin\OneDrive\Desktop\S Project\Chatbot\akshaya-backend\data\raw_documents"
+    )
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+def get_settings() -> Settings:
+    return Settings()

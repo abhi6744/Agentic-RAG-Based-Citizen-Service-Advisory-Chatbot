@@ -1,0 +1,17 @@
+{
+  "message_id": 264,
+  "conversation_id": 109,
+  "response_type": "service_unavailable",
+  "detected_service": "ration_card",
+  "summary": "The assistant is temporarily busy. Please try again in a moment.",
+  "documents_and_eligibility": null,
+  "next_steps": null,
+  "citations": [],
+  "confidence_score": null,
+  "confidence_level": null,
+  "requires_official_verification": true,
+  "verification_message": "",
+  "image_description": "This is not a document; it is a completely solid, uniform square of bright **red** color (hex code `#FF0000` / RGB: `255, 0, 0`) with no text, patterns, or other visual elements. \n\nIf you intended to upload a specific file or document, please try uploading it again.",
+  "privacy_warning": null,
+  "created_at": "2026-09-20T23:42:58"
+}

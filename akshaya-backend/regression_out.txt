@@ -1,0 +1,65 @@
+Running Full Regression Set...
+
+--- Phase 1 - Q1 (Ration Card) ---
+Q: What documents do I need for a new ration card in Kerala?
+Detected Service: ration_card
+Response Type: answer
+Summary: To obtain a new ration card in Kerala, the head of the household must submit an application form along with a photograph and a certificate proving they are not currently included in any other ration card.
+--------------------------------------------------
+
+--- Phase 1 - Q2 (Scholarship) ---
+Q: Am I eligible for a National Scholarship if my family income is 3 lakhs?
+Detected Service: scholarship
+Response Type: service_unavailable
+Summary: The assistant is temporarily busy. Please try again in a moment.
+--------------------------------------------------
+
+--- Phase 1 - Q3 (Aadhaar) ---
+Q: My name in Aadhaar is different from my certificate, what do I do?
+Detected Service: aadhaar
+Response Type: answer
+Summary: To update your name in Aadhaar to match your certificate, you must submit an update request with an acceptable supporting Proof of Identity (PoI) document. The name mentioned in the supporting document will be replicated exactly as-is in your Aadhaar record.
+--------------------------------------------------
+
+--- Phase 1 - Q4 (Out of scope) ---
+Q: What is the capital of France?
+Detected Service: unsupported
+Response Type: out_of_scope
+Summary: That is outside my current support scope. I currently help with Aadhaar services, Kerala ration cards, and scholarship guidance.
+--------------------------------------------------
+
+--- Phase 1 - Q5 (Obscure in-scope) ---
+Q: Can I use my ration card to get a free helicopter ride in Kerala?
+Detected Service: ration_card
+Response Type: answer
+Summary: The provided context does not contain any information about using a ration card to obtain a free helicopter ride in Kerala. Ration cards are legally used to receive entitled food grains from registered fair price shops.
+--------------------------------------------------
+
+--- Phase 1 - Q6 (Audit) ---
+Q: What is the exact penalty fee for losing a ration card 5 times?
+Detected Service: ration_card
+Response Type: answer
+Summary: The provided context does not mention a specific penalty fee for losing a ration card five times; it only states that a duplicate card is issued on payment of the value of the duplicate ration card as fixed by the Government from time to time.
+--------------------------------------------------
+
+--- Regression Check - Ration Card ---
+Q: What documents do I need for a new ration card in Kerala?
+Detected Service: ration_card
+Response Type: service_unavailable
+Summary: The assistant is temporarily busy. Please try again in a moment.
+--------------------------------------------------
+
+--- Greeting Check ---
+Q: hi
+Detected Service: None
+Response Type: general
+Summary: Hello! IÆm Akshaya Advisory. I can help with Aadhaar services, Kerala ration card services, and scholarship guidance. What would you like to know?
+--------------------------------------------------
+
+--- Out of Scope Check ---
+Q: Can you write a python script for a web scraper?
+Detected Service: None
+Response Type: clarification
+Summary: I can help with that. Are you asking about Aadhaar services, a Kerala ration card, or scholarship guidance?
+--------------------------------------------------
+

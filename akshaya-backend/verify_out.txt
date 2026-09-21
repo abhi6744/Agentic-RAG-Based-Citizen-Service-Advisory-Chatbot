@@ -1,0 +1,30 @@
+
+--- Query 1: What documents do I need for a new ration card in Kerala? ---
+Detected Service: ration_card
+Response Type: service_unavailable
+Summary: The assistant is temporarily busy. Please try again in a moment.
+STATUS: CHECK EXPECTED ration_card
+
+--- Query 2: Am I eligible for a National Scholarship if my family income is 3 lakhs? ---
+Detected Service: scholarship
+Response Type: service_unavailable
+Summary: The assistant is temporarily busy. Please try again in a moment.
+STATUS: CHECK EXPECTED scholarship
+
+--- Query 3: My name in Aadhaar is different from my certificate, what do I do? ---
+Detected Service: aadhaar
+Response Type: service_unavailable
+Summary: The assistant is temporarily busy. Please try again in a moment.
+STATUS: CHECK EXPECTED aadhaar
+
+--- Query 4: What is the capital of France? ---
+Detected Service: unsupported
+Response Type: out_of_scope
+Summary: That is outside my current support scope. I currently help with Aadhaar services, Kerala ration cards, and scholarship guidance.
+STATUS: CHECK EXPECTED unsupported
+
+--- Query 5: What is the exact penalty fee for losing a ration card 5 times? ---
+Detected Service: ration_card
+Response Type: service_unavailable
+Summary: The assistant is temporarily busy. Please try again in a moment.
+Request failed: '<' not supported between instances of 'NoneType' and 'float'
