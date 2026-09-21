@@ -1,0 +1,15 @@
+graph TD
+    User([Citizen / Operator]) --> UI[Web Interface]
+    UI --> API[FastAPI Backend]
+    
+    API --> Retriever[Retrieval Engine]
+    API --> Generator[Generation Engine]
+    API --> Citation[Citation Module]
+    
+    Retriever --> VecDB[(Vector DB FAISS/Chroma)]
+    Generator --> LLM[Large Language Model]
+    
+    Admin([Administrator]) --> AdminUI[Admin Dashboard]
+    AdminUI --> DocProcessor[Document Ingestion]
+    DocProcessor --> Chunking[Text Chunking & Embedding]
+    Chunking --> VecDB

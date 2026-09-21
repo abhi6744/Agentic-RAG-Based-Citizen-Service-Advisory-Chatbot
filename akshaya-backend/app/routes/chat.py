@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.chat import ChatResponse, SourceCitation
@@ -12,7 +13,7 @@ from app.config import get_settings
 settings = get_settings()
 router = APIRouter()
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat")
 async def chat_endpoint(
     device_id: str = Form(...),
     conversation_id: Optional[int] = Form(None),
@@ -26,33 +27,25 @@ async def chat_endpoint(
     
     # Handle image upload
     if image and image.filename:
-        if image.content_type not in ["image/jpeg", "image/png", "image/webp"]:
-            return ChatResponse(
-                success=False,
-                status="image_analysis_failed",
-                message_id=-1,
-                conversation_id=conversation_id or -1,
-                answer={
-                    "summary": "I could not evaluate this image right now. Please upload a clearer document image or describe your question in text.",
-                    "eligibility": [],
-                    "documents": [],
-                    "next_steps": [],
-                    "where_to_go": [],
-                    "warning": "Please upload a JPG, PNG, or WEBP document image."
-                },
-                requires_official_verification=True,
-                created_at=datetime.utcnow()
+        contents = await image.read()
+        if not contents or len(contents) == 0 or image.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "status": "invalid_image",
+                    "error_code": "INVALID_IMAGE",
+                    "message": "The uploaded file is empty or is not a valid JPG, PNG, or WEBP image."
+                }
             )
             
         upload_dir = settings.upload_dir
         os.makedirs(upload_dir, exist_ok=True)
         
-        # Generate unique filename
         ext = os.path.splitext(image.filename)[1] or ".jpg"
         filename = f"{uuid.uuid4().hex}{ext}"
         image_path = os.path.join(upload_dir, filename)
         
-        contents = await image.read()
         with open(image_path, "wb") as f:
             f.write(contents)
     

@@ -16,16 +16,17 @@ import {
 import { API_BASE_URL } from "../config/api";
 import { useTheme } from "../contexts/ThemeContext";
 
-export type SelectedImage = {
+export type ChatImage = {
   uri: string;
   mimeType: string;
   fileName: string;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
+  webFile?: File;
 };
 
 type QueryComposerProps = {
-  onSubmit: (query: string, image?: SelectedImage, inputType?: "text" | "voice") => void;
+  onSubmit: (query: string, image?: ChatImage, inputType?: "text" | "voice") => void;
   disabled?: boolean;
   placeholder?: string;
 };
@@ -39,7 +40,7 @@ export default function QueryComposer({
 }: QueryComposerProps) {
   const { colors } = useTheme();
   const [query, setQuery] = useState("");
-  const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
+  const [selectedImage, setChatImage] = useState<ChatImage | null>(null);
   
   // Voice recording states
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -147,7 +148,7 @@ export default function QueryComposer({
       });
       if (!result.canceled && result.assets?.length) {
         const asset = result.assets[0];
-        setSelectedImage({
+        setChatImage({
           uri: asset.uri,
           mimeType: asset.mimeType ?? "image/jpeg",
           fileName: asset.fileName ?? `document-${Date.now()}.jpg`,
@@ -174,7 +175,7 @@ export default function QueryComposer({
       });
       if (!result.canceled && result.assets?.length) {
         const asset = result.assets[0];
-        setSelectedImage({
+        setChatImage({
           uri: asset.uri,
           mimeType: asset.mimeType ?? "image/jpeg",
           fileName: asset.fileName ?? `document-${Date.now()}.jpg`,
@@ -208,7 +209,7 @@ export default function QueryComposer({
     const currentImg = selectedImage;
     onSubmit(cleanedQuery, currentImg || undefined, inputOrigin);
     setQuery("");
-    setSelectedImage(null);
+    setChatImage(null);
     setInputOrigin("text");
   }
 
@@ -227,7 +228,7 @@ export default function QueryComposer({
           <Image source={{ uri: selectedImage.uri }} style={styles.previewImage} />
           <Pressable
             style={[styles.removeButton, { backgroundColor: colors.surface }]}
-            onPress={() => setSelectedImage(null)}
+            onPress={() => setChatImage(null)}
           >
             <Ionicons name="close" size={14} color={colors.text} />
           </Pressable>

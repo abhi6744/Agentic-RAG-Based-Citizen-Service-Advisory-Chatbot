@@ -1,0 +1,11 @@
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> ProcessingQuery : User Submits Query
+    ProcessingQuery --> GeneratingEmbeddings
+    GeneratingEmbeddings --> SearchingDatabase
+    SearchingDatabase --> ConstructingPrompt : Found Chunks
+    SearchingDatabase --> LowConfidence : No Relevant Chunks
+    LowConfidence --> Idle : Return Warning
+    ConstructingPrompt --> CallingLLM
+    CallingLLM --> MappingCitations
+    MappingCitations --> Idle : Display Answer

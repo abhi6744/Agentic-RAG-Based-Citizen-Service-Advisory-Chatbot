@@ -1,0 +1,6 @@
+graph LR
+    User([User]) -- "Natural Language Query" --> System[Agentic RAG Chatbot System]
+    System -- "Grounded Answer + Citations" --> User
+    
+    Admin([Administrator]) -- "Official PDF Documents" --> System
+    System -- "System Logs & Metrics" --> Admin

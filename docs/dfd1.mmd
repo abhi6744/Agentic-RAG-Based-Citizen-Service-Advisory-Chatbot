@@ -1,0 +1,12 @@
+graph TD
+    User([User]) --> QProc[Query Processor]
+    QProc --> Embed[Embedding Generator]
+    Embed --> VecSearch[Vector Search]
+    
+    VecSearch -- "Search Query" --> VecDB[(Vector Database)]
+    VecDB -- "Top-K Chunks" --> PromptGen[Prompt Constructor]
+    
+    PromptGen --> LLM[LLM API]
+    LLM --> Citation[Citation Mapper]
+    Citation --> Output[Response Formatter]
+    Output --> User

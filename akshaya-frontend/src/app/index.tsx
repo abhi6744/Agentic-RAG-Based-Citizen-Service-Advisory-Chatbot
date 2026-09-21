@@ -26,8 +26,9 @@ import {
 } from "react-native";
 
 import AppDrawerContent from "../components/AppDrawerContent";
+import DocumentImage from "../components/DocumentImage";
 import ChatImagePreview from "../components/ChatImagePreview";
-import QueryComposer, { SelectedImage } from "../components/QueryComposer";
+import QueryComposer, { ChatImage } from "../components/QueryComposer";
 import { useTheme } from "../contexts/ThemeContext";
 import { getDeviceId } from "../utils/device";
 import { cleanText } from "../utils/cleanResponseText";
@@ -129,6 +130,28 @@ const welcomeMessage: Message = {
   role: "assistant",
   text: "Describe your issue in your own words  -  Aadhaar, ration card, or scholarship. You can also attach a photo of a document.",
 };
+
+async function uriToWebFile(
+  uri: string,
+  fileName: string,
+  mimeType: string,
+): Promise<File> {
+  const response = await fetch(uri);
+
+  if (!response.ok) {
+    throw new Error("Unable to read selected image");
+  }
+
+  const blob = await response.blob();
+
+  if (blob.size === 0) {
+    throw new Error("Selected image is empty");
+  }
+
+  return new File([blob], fileName, {
+    type: mimeType || blob.type || "image/jpeg",
+  });
+}
 
 export default function HomeChatScreen() {
   const { colors } = useTheme();
@@ -274,7 +297,7 @@ export default function HomeChatScreen() {
     }
   }
 
-  async function submitQuestion(question: string, image?: SelectedImage, inputType?: "text" | "voice") {
+  async function submitQuestion(question: string, image?: ChatImage, inputType?: "text" | "voice") {
     const cleanedQuestion = question.trim();
 
     if ((!cleanedQuestion && !image) || isProcessing) {
@@ -308,9 +331,17 @@ export default function HomeChatScreen() {
 
       if (image) {
         if (Platform.OS === 'web') {
-          const res = await fetch(image.uri);
-          const blob = await res.blob();
-          const file = new File([blob], image.fileName, { type: image.mimeType });
+          const file = await uriToWebFile(image.uri, image.fileName, image.mimeType);
+          if (!file) {
+            throw new Error("Invalid file object created");
+          }
+          if (file.size === 0) {
+            throw new Error("The uploaded file is empty.");
+          }
+          const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+          if (!allowedTypes.includes(file.type)) {
+            throw new Error("Please upload a JPG, PNG, or WEBP document image.");
+          }
           formData.append("image", file);
         } else {
           formData.append("image", {
@@ -330,11 +361,14 @@ export default function HomeChatScreen() {
         body: formData,
       });
 
+      const rawData = await response.json();
+
       if (!response.ok) {
+        if (rawData && rawData.message) {
+          throw new Error(rawData.message);
+        }
         throw new Error(`API error: ${response.status}`);
       }
-
-      const rawData = await response.json();
       const data: BackendData = normalizeChatResponse(rawData);
       
       setConversationId(data.conversation_id);
@@ -549,7 +583,7 @@ export default function HomeChatScreen() {
           {messages.filter(msg => msg.id !== 'welcome').map((message, index, filteredMessages) => {
             // Find the immediately preceding user message for retries
             let lastUserQuery = "";
-            let lastUserImage: SelectedImage | undefined = undefined;
+            let lastUserImage: ChatImage | undefined = undefined;
             if (message.backendData?.response_type === 'service_unavailable') {
               for (let i = index - 1; i >= 0; i--) {
                 if (filteredMessages[i].role === 'user') {
@@ -663,18 +697,10 @@ function MessageBubble({ message, onRetry }: { message: Message, onRetry?: () =>
         ]}
       >
           {message.imageUri ? (
-            Platform.OS === 'web' && message.imageUri.startsWith('blob:') ? (
-              <img 
-                src={message.imageUri} 
-                style={{ width: 200, height: 200, borderRadius: 8, marginBottom: 8, objectFit: 'cover', backgroundColor: '#E0E0E0', display: 'block' }} 
-              />
-            ) : (
-              <Image
-                source={{ uri: message.imageUri }}
-                style={{ width: 200, height: 200, borderRadius: 8, marginBottom: 8, backgroundColor: '#E0E0E0' }}
-                resizeMode="cover"
-              />
-            )
+            <DocumentImage 
+              uri={message.imageUri} 
+              style={{ width: 200, height: 200, borderRadius: 8, marginBottom: 8 }} 
+            />
           ) : null}
           {isUser ? (
             <View>
@@ -942,20 +968,6 @@ function AdvisoryDetails({ data }: { data: BackendData }) {
           <Text style={[styles.detailText, { color: colors.textMuted }]}>{serviceLabel}</Text>
         </View>
       </View>
-
-
-      {/* Summary */}
-      {(answer?.summary) && (
-        <View style={[styles.detailCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch' }]}>
-          <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
-            <View style={[styles.detailIcon, { backgroundColor: colors.primarySoft, marginBottom: 0 }]}>
-              <Ionicons name="chatbubbles-outline" size={19} color={colors.primaryDark} />
-            </View>
-            <Text style={[styles.detailTitle, { color: colors.text }]}>Advisory Summary</Text>
-          </View>
-          <Text style={[styles.detailText, { color: colors.text, lineHeight: 20 }]}>{cleanText(answer?.summary || "")}</Text>
-        </View>
-      )}
 
 
       {/* Documents & Eligibility */}

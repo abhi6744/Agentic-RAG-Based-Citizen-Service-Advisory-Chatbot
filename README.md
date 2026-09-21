@@ -91,7 +91,7 @@ Stores structured data such as chat history, feedback, and user sessions.
 ## Technology stack
 - **Frontend:** React Native, Expo, TypeScript
 - **Backend:** Python, FastAPI, Uvicorn, SQLAlchemy
-- **AI/Vector Store:** FAISS, Gemini API (LLM)
+- **AI/Vector Store:** FAISS, Grok API (LLM)
 - **Database:** SQLite
 
 ## Environment variables
@@ -109,7 +109,7 @@ python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ``
 
 ## Running the frontend
