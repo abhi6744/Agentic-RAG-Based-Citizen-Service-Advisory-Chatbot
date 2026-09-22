@@ -344,11 +344,9 @@ export default function HomeChatScreen() {
           }
           formData.append("image", file);
         } else {
-          formData.append("image", {
-            uri: image.uri,
-            name: image.fileName,
-            type: image.mimeType,
-          } as any);
+          const resp = await fetch(image.uri);
+          const blob = await resp.blob();
+          formData.append("image", blob, image.fileName);
         }
       }
 
