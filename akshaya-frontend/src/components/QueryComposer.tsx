@@ -1,10 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { Audio } from "expo-av";
 import { useState } from "react";
 import {
   Alert,
-  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -12,6 +10,7 @@ import {
   TextInput,
   View,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { API_BASE_URL } from "../config/api";
 import { useTheme } from "../contexts/ThemeContext";
@@ -43,7 +42,7 @@ export default function QueryComposer({
   const [selectedImage, setChatImage] = useState<ChatImage | null>(null);
   
   // Voice recording states
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<any>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [inputOrigin, setInputOrigin] = useState<"text" | "voice">("text");
@@ -65,21 +64,13 @@ export default function QueryComposer({
         showToast("Voice recording is not supported on Web. Please use the mobile app.");
         return;
       }
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
-        Alert.alert("Permission Denied", "Microphone permission is required to use voice input.");
-        return;
-      }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      
+      // Temporarily bypassed for Viva deployment to prevent iOS Expo Go native crash
+      Alert.alert(
+        "Voice Not Supported", 
+        "The native audio module is missing from your Expo Go client. Please update your Expo Go app or use text input for now."
       );
-      setRecording(recording);
-      setIsRecording(true);
+      return;
     } catch (err) {
       console.error("Failed to start recording", err);
       Alert.alert("Error", "Failed to start recording.");

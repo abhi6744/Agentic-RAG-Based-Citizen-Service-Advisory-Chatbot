@@ -2,6 +2,7 @@ import { API_BASE_URL } from '../config/api';
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Speech from 'expo-speech';
+import * as FileSystem from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -322,53 +323,71 @@ export default function HomeChatScreen() {
 
     try {
       const actualDeviceId = await getDeviceId();
-      const formData = new FormData();
-      formData.append("device_id", actualDeviceId);
-      formData.append("input_type", inputType || "text");
-      if (cleanedQuestion) {
-        formData.append("text", cleanedQuestion);
-      }
+      let rawData;
 
-      if (image) {
-        if (Platform.OS === 'web') {
+      if (image && Platform.OS !== 'web') {
+        // 100% reliable file upload for iOS/Android using expo-file-system
+        const uploadOptions = {
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: 'image',
+          mimeType: image.mimeType || 'image/jpeg',
+          parameters: {
+            device_id: actualDeviceId,
+            input_type: inputType || "text",
+          } as any
+        };
+        if (cleanedQuestion) uploadOptions.parameters.text = cleanedQuestion;
+        if (conversationId) uploadOptions.parameters.conversation_id = conversationId.toString();
+
+        const uploadResponse = await FileSystem.uploadAsync(`${API_URL}/chat`, image.uri, uploadOptions);
+        
+        if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
+          let errorMsg = `API error: ${uploadResponse.status}`;
+          try {
+            const errData = JSON.parse(uploadResponse.body);
+            if (errData.message) errorMsg = errData.message;
+          } catch (e) {}
+          throw new Error(errorMsg);
+        }
+        rawData = JSON.parse(uploadResponse.body);
+
+      } else {
+        // Standard fetch for Web fallback or Text-only chat
+        const formData = new FormData();
+        formData.append("device_id", actualDeviceId);
+        formData.append("input_type", inputType || "text");
+        
+        if (cleanedQuestion) {
+          formData.append("text", cleanedQuestion);
+        }
+        if (conversationId) {
+          formData.append("conversation_id", conversationId.toString());
+        }
+        
+        if (image) {
           const file = await uriToWebFile(image.uri, image.fileName, image.mimeType);
-          if (!file) {
-            throw new Error("Invalid file object created");
-          }
-          if (file.size === 0) {
-            throw new Error("The uploaded file is empty.");
-          }
+          if (!file) throw new Error("Invalid file object created");
+          if (file.size === 0) throw new Error("The uploaded file is empty.");
           const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-          if (!allowedTypes.includes(file.type)) {
-            throw new Error("Please upload a JPG, PNG, or WEBP document image.");
-          }
+          if (!allowedTypes.includes(file.type)) throw new Error("Please upload a JPG, PNG, or WEBP document image.");
           formData.append("image", file);
-        } else {
-          formData.append("image", {
-            uri: image.uri,
-            name: image.fileName,
-            type: image.mimeType,
-          } as any);
+        }
+
+        const response = await fetch(`${API_URL}/chat`, {
+          method: "POST",
+          body: formData,
+        });
+        
+        rawData = await response.json();
+        if (!response.ok) {
+          if (rawData && rawData.message) {
+            throw new Error(rawData.message);
+          }
+          throw new Error(`API error: ${response.status}`);
         }
       }
 
-      if (conversationId) {
-        formData.append("conversation_id", conversationId.toString());
-      }
-
-      const response = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const rawData = await response.json();
-
-      if (!response.ok) {
-        if (rawData && rawData.message) {
-          throw new Error(rawData.message);
-        }
-        throw new Error(`API error: ${response.status}`);
-      }
       const data: BackendData = normalizeChatResponse(rawData);
       
       setConversationId(data.conversation_id);
@@ -869,7 +888,7 @@ function AdvisoryDetails({ data }: { data: BackendData }) {
           Speech.stop();
           segmentRef.current = 0;
           syncState('playing');
-          playNextSegment(0);
+          setTimeout(() => playNextSegment(0), 100);
         }
       } else {
         if (speechStateRef.current === 'paused') {
@@ -878,12 +897,14 @@ function AdvisoryDetails({ data }: { data: BackendData }) {
         } else {
           Speech.stop();
           syncState('playing');
-          Speech.speak(textToRead, { 
-            language: 'en-IN', 
-            rate: 0.9,
-            onDone: () => syncState('stopped'),
-            onStopped: () => { if (speechStateRef.current !== 'paused') syncState('stopped'); }
-          });
+          setTimeout(() => {
+            Speech.speak(textToRead, { 
+              language: 'en-IN', 
+              rate: 0.9,
+              onDone: () => syncState('stopped'),
+              onStopped: () => { if (speechStateRef.current !== 'paused') syncState('stopped'); }
+            });
+          }, 100);
         }
       }
     } catch (e) {
