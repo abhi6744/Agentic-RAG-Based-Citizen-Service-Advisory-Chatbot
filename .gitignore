@@ -76,3 +76,11 @@ akshaya-frontend/.vscode/
 .env
 .env.*
 !.env.example
+generate_diagrams.py
+akshaya-backend/generate_expanded_report.py
+docs/~$SRS.pdf
+docs/create_project_details.py
+.gitignore
+akshaya-backend/generate_ultimate_viva.py
+docs/project_details.pdf
+akshaya-backend/generate_viva_pdf.py

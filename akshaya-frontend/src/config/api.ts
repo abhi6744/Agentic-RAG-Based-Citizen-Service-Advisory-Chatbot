@@ -13,7 +13,7 @@ const getLocalIP = () => {
     // If you're on emulator, 10.0.2.2 points to host's localhost
     return 'http://10.0.2.2:8001';
   }
-  return 'http://192.168.16.241:8001';
+  return 'http://192.168.137.232:8001';
 };
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || getLocalIP();
