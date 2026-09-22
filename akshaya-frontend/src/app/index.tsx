@@ -2,7 +2,7 @@ import { API_BASE_URL } from '../config/api';
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Speech from 'expo-speech';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Clipboard from 'expo-clipboard';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -329,7 +329,7 @@ export default function HomeChatScreen() {
         // 100% reliable file upload for iOS/Android using expo-file-system
         const uploadOptions = {
           httpMethod: 'POST',
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          uploadType: FileSystem.FileSystemUploadType?.MULTIPART || 1,
           fieldName: 'image',
           mimeType: image.mimeType || 'image/jpeg',
           parameters: {
@@ -878,33 +878,41 @@ function AdvisoryDetails({ data }: { data: BackendData }) {
     });
   };
 
-  const handlePlay = () => {
+  const handlePlay = async () => {
     try {
+      if (!textToRead || textToRead.trim() === "") {
+        Alert.alert("Nothing to Read", "There is no text available to read out loud.");
+        return;
+      }
       if (Platform.OS === 'android') {
         if (speechStateRef.current === 'paused') {
           syncState('playing');
           playNextSegment(segmentRef.current);
         } else {
-          Speech.stop();
+          await Speech.stop();
           segmentRef.current = 0;
           syncState('playing');
-          setTimeout(() => playNextSegment(0), 100);
+          playNextSegment(0);
         }
       } else {
         if (speechStateRef.current === 'paused') {
-          Speech.resume();
+          await Speech.resume();
           syncState('playing');
         } else {
-          Speech.stop();
+          await Speech.stop();
           syncState('playing');
           setTimeout(() => {
             Speech.speak(textToRead, { 
-              language: 'en-IN', 
               rate: 0.9,
               onDone: () => syncState('stopped'),
-              onStopped: () => { if (speechStateRef.current !== 'paused') syncState('stopped'); }
+              onStopped: () => { if (speechStateRef.current !== 'paused') syncState('stopped'); },
+              onError: (err) => {
+                console.error("Speech Error:", err);
+                Alert.alert("Audio Error", "Could not play audio. Please ensure your device is not on Silent Mode.");
+                syncState('stopped');
+              }
             });
-          }, 100);
+          }, 150);
         }
       }
     } catch (e) {
@@ -912,14 +920,14 @@ function AdvisoryDetails({ data }: { data: BackendData }) {
     }
   };
 
-  const handlePause = () => {
+  const handlePause = async () => {
     try {
       if (speechStateRef.current === 'playing') {
         syncState('paused');
         if (Platform.OS === 'android') {
-          Speech.stop();
+          await Speech.stop();
         } else {
-          Speech.pause();
+          await Speech.pause();
         }
       }
     } catch (e) {
@@ -927,11 +935,11 @@ function AdvisoryDetails({ data }: { data: BackendData }) {
     }
   };
 
-  const handleStop = () => {
+  const handleStop = async () => {
     try {
       syncState('stopped');
       segmentRef.current = 0;
-      Speech.stop();
+      await Speech.stop();
     } catch (e) {
       console.error("[AdvisoryDetails] Error in handleStop:", e);
     }
@@ -949,7 +957,7 @@ function AdvisoryDetails({ data }: { data: BackendData }) {
         })
       });
     } catch (e) {
-      console.error('Failed to submit feedback', e);
+      console.error("Feedback error", e);
     }
   };
 
